@@ -8,6 +8,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vue.js&logoColor=white)](https://vuejs.org/)
+[![Test](https://img.shields.io/badge/Tests-49%20passed-brightgreen?style=flat-square)](tests/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
 [在线演示](#) · [功能特性](#-功能特性) · [快速开始](#-快速开始) · [模型价格对比](#-模型价格对比)
@@ -131,6 +132,13 @@ ui/                          # Vue 3 前端
 ├── src/
 │   └── App.vue             # 主应用
 └── vite.config.js          # Vite 配置
+
+tests/                        # 单元测试
+├── scanner.test.ts          # 扫描器测试
+├── extractor.test.ts        # 提取器测试
+├── translator.test.ts       # 翻译器测试
+├── mapper.test.ts           # 映射器测试
+└── context-manager.test.ts  # 上下文管理测试
 ```
 
 ---
@@ -196,6 +204,26 @@ npm run dev:ui      # 前端 :5173
 ```
 
 访问 http://localhost:3000 开始使用！
+
+### 测试
+
+```bash
+# 运行所有测试
+npm test
+
+# 监听模式
+npm run test:watch
+
+# 生成覆盖率报告
+npm run test:coverage
+```
+
+**测试覆盖：**
+- `Scanner` - 文件扫描、类型识别、忽略模式
+- `Extractor` - 字符串/注释/Markdown/JSON 提取
+- `Translator` - 重试机制、验证、上下文管理
+- `Mapper` - 映射生成、文件写入
+- `ContextManager` - 术语学习、压缩、重置
 
 ---
 
