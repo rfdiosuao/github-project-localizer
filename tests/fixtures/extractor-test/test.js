@@ -1,0 +1,1 @@
+const message = '这是中文';
