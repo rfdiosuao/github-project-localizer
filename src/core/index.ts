@@ -6,3 +6,5 @@ export { Translator } from './translator.js';
 export type { TranslationResult, TranslationProgress } from './translator.js';
 export { Mapper } from './mapper.js';
 export type { MappingResult, OutputMode } from './mapper.js';
+export { TranslationContextManager } from './context-manager.js';
+export type { ContextConfig, TranslationPair } from './context-manager.js';

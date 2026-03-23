@@ -1,6 +1,7 @@
 import { LLMAdapter } from '../llm/base.js';
 import { getSystemPrompt } from '../prompts/index.js';
 import { ExtractedText } from './extractor.js';
+import { TranslationContextManager, ContextConfig } from './context-manager.js';
 
 export interface TranslationResult {
   original: string;
@@ -35,13 +36,43 @@ const PLACEHOLDER_PATTERNS = [
   /<[^>]+>/g              // <tag>
 ];
 
+// 上下文配置
+const DEFAULT_CONTEXT_CONFIG: Partial<ContextConfig> = {
+  maxContextTokens: 2000,
+  resetInterval: 50,     // 每50个翻译重置上下文
+  enableTerminology: true
+};
+
 export class Translator {
   private llm: LLMAdapter;
   private onProgress?: ProgressCallback;
+  private contextManager: TranslationContextManager;
 
-  constructor(llm: LLMAdapter, onProgress?: ProgressCallback) {
+  constructor(
+    llm: LLMAdapter,
+    onProgress?: ProgressCallback,
+    contextConfig?: Partial<ContextConfig>
+  ) {
     this.llm = llm;
     this.onProgress = onProgress;
+    this.contextManager = new TranslationContextManager({
+      ...DEFAULT_CONTEXT_CONFIG,
+      ...contextConfig
+    });
+  }
+
+  /**
+   * 手动添加术语
+   */
+  addTerm(original: string, translated: string): void {
+    this.contextManager.addTerm(original, translated);
+  }
+
+  /**
+   * 获取上下文状态
+   */
+  getContextStatus() {
+    return this.contextManager.getStatus();
   }
 
   async translateTexts(
@@ -60,13 +91,18 @@ export class Translator {
         status: 'translating'
       });
 
-      const batchResults = await Promise.all(
-        batch.map(text => this.translateTextWithRetry(text))
-      );
+      // 顺序翻译以利用上下文
+      for (const text of batch) {
+        const result = await this.translateTextWithRetry(text);
+        results.push(result);
 
-      results.push(...batchResults);
+        // 成功翻译后更新上下文
+        if (result.status === 'success') {
+          this.contextManager.addTranslation(text.text, result.translated);
+        }
+      }
 
-      // 避免API限流
+      // 批次间延迟
       if (i < batches.length - 1) {
         await this.delay(200);
       }
@@ -90,7 +126,14 @@ export class Translator {
 
     for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
       try {
-        const systemPrompt = this.getSystemPromptForType(text.type);
+        const basePrompt = this.getSystemPromptForType(text.type);
+        const contextPrompt = this.contextManager.buildContextPrompt();
+
+        // 合并系统提示和上下文
+        const systemPrompt = contextPrompt
+          ? `${basePrompt}\n\n${contextPrompt}`
+          : basePrompt;
+
         const translated = await this.llm.translate(
           text.text,
           text.context,
