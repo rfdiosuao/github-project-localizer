@@ -1,0 +1,8 @@
+export { ProjectScanner } from './scanner.js';
+export type { ScanResult, FileType } from './scanner.js';
+export { TextExtractor } from './extractor.js';
+export type { ExtractedText, ExtractionResult } from './extractor.js';
+export { Translator } from './translator.js';
+export type { TranslationResult, TranslationProgress } from './translator.js';
+export { Mapper } from './mapper.js';
+export type { MappingResult, OutputMode } from './mapper.js';
