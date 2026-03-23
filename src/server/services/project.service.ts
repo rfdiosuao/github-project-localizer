@@ -4,15 +4,20 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { Project, ProjectStatus, ScanResult, NotFoundError } from '../types/index.js';
+import { Project, ProjectStatus, ScanResult, NotFoundError, ValidationError } from '../types/index.js';
 import { SQLiteRepository } from '../repositories/sqlite.repository.js';
 import { Config } from '../../config/index.js';
 import { ProjectScanner } from '../../core/scanner.js';
 import logger from '../../utils/logger.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+// GitHub URL 验证正则
+const GITHUB_URL_REGEX = /^https:\/\/github\.com\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+(\.git)?$/;
+// 本地路径验证：只允许字母、数字、下划线、连字符、点和斜杠
+const SAFE_PATH_REGEX = /^[a-zA-Z0-9_\-./\\]+$/;
 
 export class ProjectService {
   constructor(
@@ -43,12 +48,26 @@ export class ProjectService {
     let finalName = name;
 
     if (url) {
+      // 验证 GitHub URL 格式，防止命令注入
+      if (!GITHUB_URL_REGEX.test(url)) {
+        throw new ValidationError('Invalid GitHub URL format. Only https://github.com/... URLs are allowed');
+      }
+
       // 从 GitHub URL 克隆
       finalName = name || path.basename(url, '.git');
       finalLocalPath = path.join(projectsDir, finalName);
 
+      // 验证生成的路径安全性
+      if (!SAFE_PATH_REGEX.test(finalName)) {
+        throw new ValidationError('Invalid project name derived from URL');
+      }
+
       try {
-        await execAsync(`git clone "${url}" "${finalLocalPath}"`);
+        // 使用 execFile 避免命令注入，参数作为数组传递
+        await execFileAsync('git', ['clone', url, finalLocalPath], {
+          timeout: 120000, // 2分钟超时
+          maxBuffer: 1024 * 1024 // 1MB buffer
+        });
         logger.info('Project cloned', { url, path: finalLocalPath });
       } catch (error) {
         logger.error('Failed to clone repository', error as Error, { url });

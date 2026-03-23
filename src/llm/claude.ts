@@ -1,5 +1,8 @@
 import { LLMAdapter, LLMMessage, LLMOptions, LLMResponse } from './base.js';
 
+// 默认超时时间
+const DEFAULT_TIMEOUT = 60000;
+
 export class ClaudeAdapter extends LLMAdapter {
   name = 'Claude';
   models = ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5'];
@@ -14,11 +17,13 @@ export class ClaudeAdapter extends LLMAdapter {
   }
 
   async chat(messages: LLMMessage[], options?: LLMOptions): Promise<LLMResponse> {
+    const timeout = options?.timeout || DEFAULT_TIMEOUT;
+
     // Claude API需要分离system消息
     const systemMessage = messages.find(m => m.role === 'system')?.content || '';
     const chatMessages = messages.filter(m => m.role !== 'system');
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const requestPromise = fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -35,6 +40,8 @@ export class ClaudeAdapter extends LLMAdapter {
         }))
       })
     });
+
+    const response = await this.withTimeout(requestPromise, timeout);
 
     if (!response.ok) {
       const error = await response.text();

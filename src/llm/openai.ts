@@ -1,5 +1,8 @@
 import { LLMAdapter, LLMMessage, LLMOptions, LLMResponse } from './base.js';
 
+// 默认超时时间
+const DEFAULT_TIMEOUT = 60000;
+
 export class OpenAIAdapter extends LLMAdapter {
   name = 'OpenAI';
   models = ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'];
@@ -16,7 +19,9 @@ export class OpenAIAdapter extends LLMAdapter {
   }
 
   async chat(messages: LLMMessage[], options?: LLMOptions): Promise<LLMResponse> {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const timeout = options?.timeout || DEFAULT_TIMEOUT;
+
+    const requestPromise = fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -29,6 +34,8 @@ export class OpenAIAdapter extends LLMAdapter {
         max_tokens: options?.maxTokens
       })
     });
+
+    const response = await this.withTimeout(requestPromise, timeout);
 
     if (!response.ok) {
       const error = await response.text();

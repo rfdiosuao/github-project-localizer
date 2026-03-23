@@ -18,6 +18,23 @@ export interface TranslationProgress {
 
 export type ProgressCallback = (progress: TranslationProgress) => void;
 
+// 重试配置
+const RETRY_CONFIG = {
+  maxRetries: 3,
+  initialDelay: 1000,  // 1秒
+  maxDelay: 10000,     // 10秒
+  backoffMultiplier: 2
+};
+
+// 占位符模式
+const PLACEHOLDER_PATTERNS = [
+  /\{[^}]+\}/g,           // {name}, {value}
+  /\{\{[^}]+\}\}/g,       // {{name}}
+  /%[sdifjo]/g,           // %s, %d, etc.
+  /\$\{[^}]+\}/g,         // ${name}
+  /<[^>]+>/g              // <tag>
+];
+
 export class Translator {
   private llm: LLMAdapter;
   private onProgress?: ProgressCallback;
@@ -44,14 +61,14 @@ export class Translator {
       });
 
       const batchResults = await Promise.all(
-        batch.map(text => this.translateText(text))
+        batch.map(text => this.translateTextWithRetry(text))
       );
 
       results.push(...batchResults);
 
       // 避免API限流
       if (i < batches.length - 1) {
-        await this.delay(100);
+        await this.delay(200);
       }
     }
 
@@ -65,28 +82,124 @@ export class Translator {
     return results;
   }
 
-  private async translateText(text: ExtractedText): Promise<TranslationResult> {
-    try {
-      const systemPrompt = this.getSystemPromptForType(text.type);
-      const translated = await this.llm.translate(
-        text.text,
-        text.context,
-        systemPrompt
-      );
+  /**
+   * 带重试的翻译
+   */
+  private async translateTextWithRetry(text: ExtractedText): Promise<TranslationResult> {
+    let lastError: Error | null = null;
 
-      return {
-        original: text.text,
-        translated: translated.trim(),
-        status: 'success'
-      };
-    } catch (error) {
-      return {
-        original: text.text,
-        translated: '',
-        status: 'failed',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+    for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+      try {
+        const systemPrompt = this.getSystemPromptForType(text.type);
+        const translated = await this.llm.translate(
+          text.text,
+          text.context,
+          systemPrompt
+        );
+
+        // 验证翻译结果
+        const validation = this.validateTranslation(text.text, translated);
+
+        if (!validation.valid) {
+          return {
+            original: text.text,
+            translated: '',
+            status: 'failed',
+            error: validation.reason
+          };
+        }
+
+        return {
+          original: text.text,
+          translated: translated.trim(),
+          status: 'success'
+        };
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error');
+
+        // 不可重试的错误直接返回
+        if (this.isNonRetriableError(lastError)) {
+          break;
+        }
+
+        // 指数退避重试
+        if (attempt < RETRY_CONFIG.maxRetries) {
+          const delay = Math.min(
+            RETRY_CONFIG.initialDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt),
+            RETRY_CONFIG.maxDelay
+          );
+          await this.delay(delay);
+        }
+      }
     }
+
+    return {
+      original: text.text,
+      translated: '',
+      status: 'failed',
+      error: lastError?.message || 'Translation failed after retries'
+    };
+  }
+
+  /**
+   * 验证翻译结果
+   */
+  private validateTranslation(original: string, translated: string): { valid: boolean; reason?: string } {
+    // 检查空结果
+    if (!translated || !translated.trim()) {
+      return { valid: false, reason: 'Empty translation result' };
+    }
+
+    // 检查占位符是否保留
+    for (const pattern of PLACEHOLDER_PATTERNS) {
+      const originalPlaceholders = original.match(pattern) || [];
+      const translatedPlaceholders = translated.match(pattern) || [];
+
+      if (originalPlaceholders.length !== translatedPlaceholders.length) {
+        return {
+          valid: false,
+          reason: `Placeholder mismatch: expected ${originalPlaceholders.length}, got ${translatedPlaceholders.length}`
+        };
+      }
+
+      // 检查每个占位符是否保留
+      for (const placeholder of originalPlaceholders) {
+        if (!translated.includes(placeholder)) {
+          return {
+            valid: false,
+            reason: `Placeholder lost: ${placeholder}`
+          };
+        }
+      }
+    }
+
+    // 检查是否翻译成了中文（至少包含一些中文字符或保持原样）
+    const hasChinese = /[\u4e00-\u9fa5]/.test(translated);
+    const isUnchanged = original === translated.trim();
+
+    if (!hasChinese && !isUnchanged) {
+      // 没有中文且发生了变化，可能是翻译成了其他语言
+      return { valid: false, reason: 'Translation does not appear to be Chinese' };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * 判断是否为不可重试的错误
+   */
+  private isNonRetriableError(error: Error): boolean {
+    const message = error.message.toLowerCase();
+
+    // 认证错误、配额错误不重试
+    if (message.includes('unauthorized') ||
+        message.includes('invalid api key') ||
+        message.includes('quota exceeded') ||
+        message.includes('billing')) {
+      return true;
+    }
+
+    return false;
   }
 
   private getSystemPromptForType(type: string): string {
