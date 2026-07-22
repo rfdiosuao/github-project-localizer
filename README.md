@@ -1,5 +1,7 @@
 <div align="center">
 
+<strong>简体中文</strong> · <a href="README.en.md">English</a>
+
 # 🌐 GitHub Project Localizer
 
 **AI 驱动的开源项目汉化工具**
@@ -9,7 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vue.js&logoColor=white)](https://vuejs.org/)
 [![Test](https://img.shields.io/badge/Tests-49%20passed-brightgreen?style=flat-square)](tests/)
-[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
 [在线演示](#) · [功能特性](#-功能特性) · [快速开始](#-快速开始) · [模型价格对比](#-模型价格对比)
 
@@ -291,7 +293,7 @@ git push origin feature/your-feature
 
 ## 📄 许可证
 
-[MIT License](LICENSE)
+项目 README 声明采用 MIT License；当前仓库尚未包含独立的 `LICENSE` 文件，分发前请补充或核对完整许可文本。
 
 ---
 
